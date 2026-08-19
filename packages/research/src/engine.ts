@@ -270,16 +270,19 @@ function extractExecutiveName(
   const titleLower = title.toLowerCase();
   const companyLower = company.toLowerCase();
 
-  // Strict patterns — ordered by reliability.
+  // Strict patterns — ordered by reliability. Word-separating whitespace is
+  // restricted to spaces/tabs (not \n) so a capture can never span across a
+  // paragraph break and glue unrelated text (e.g. a nearby heading or a
+  // "LinkedIn" label) onto a name — see the equivalent fix in discovery.ts.
   const strictPatterns = [
     // "Name | CEO" or "Name | Group CEO" (Yahoo Finance / board page format)
-    /\|\s*([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){1,4})\s*\|/,
+    /\|[ \t]*([A-Z][a-zA-Z.'-]+(?:[ \t]+[A-Z][a-zA-Z.'-]+){1,4})[ \t]*\|/,
     // "Amit Jain C.F.A. | Group Chief Executive Officer" (Yahoo Finance profile table)
-    /([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){1,4})\s*(?:C\.?F\.?A\.?|CFA|MBA|PhD)?\s*\|\s*(?:Group\s+)?(?:Chief\s+)?(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director)/,
+    /([A-Z][a-zA-Z.'-]+(?:[ \t]+[A-Z][a-zA-Z.'-]+){1,4})[ \t]*(?:C\.?F\.?A\.?|CFA|MBA|PhD)?[ \t]*\|[ \t]*(?:Group[ \t]+)?(?:Chief[ \t]+)?(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director)/,
     // "Name — CEO, Company" (dash separator, only at start of line or after newline)
-    /(?:^|\n)([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){1,4})\s*[-–]\s*(?:Group\s+)?(?:Chief\s+)?(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman)/,
+    /(?:^|\n)([A-Z][a-zA-Z.'-]+(?:[ \t]+[A-Z][a-zA-Z.'-]+){1,4})[ \t]*[-–][ \t]*(?:Group[ \t]+)?(?:Chief[ \t]+)?(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman)/,
     // "Mr. Amit Jain" / "H.E. Mohamed Alabbar" — only when followed by CEO/title keyword nearby
-    /(?:Mr\.|Mrs\.|Ms\.|H\.E\.|Dr\.|Sheikh)\s+([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){1,4})[^\n]{0,60}(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Group Chief)/i,
+    /(?:Mr\.|Mrs\.|Ms\.|H\.E\.|Dr\.|Sheikh)[ \t]+([A-Z][a-zA-Z.'-]+(?:[ \t]+[A-Z][a-zA-Z.'-]+){1,4})[^\n]{0,60}(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Group Chief)/i,
   ];
 
   // Prioritize results whose TITLE contains the CEO keyword (more likely to be about the CEO specifically).
@@ -318,6 +321,11 @@ function isCommonWord(s: string): boolean {
   return common.has(s);
 }
 
+const CONNECTOR_WORDS = new Set([
+  "al", "bin", "ibn", "abdul", "abdel", "el", "de", "van", "der",
+  "dr.", "mr.", "mrs.", "ms.", "h.e.", "sheikh",
+]);
+
 function isPlausibleName(name: string): boolean {
   // A plausible person name: 2-5 capitalized words, no lowercase-only words, no conjunctions.
   const words = name.split(/\s+/);
@@ -326,11 +334,21 @@ function isPlausibleName(name: string): boolean {
     "and", "the", "of", "with", "serving", "as", "Vice", "concurrently",
     "Community", "Facilities", "Asset", "Management", "Development",
     "Board", "Executive", "Team", "Properties", "Group", "Company",
+    "MENA", "GCC", "EMEA", "APAC", "Africa", "Asia", "Europe", "Americas",
+    "Technology", "Technologies", "Software", "Solutions", "Systems",
+    "Holdings", "Global", "International", "Digital",
   ]);
   for (const w of words) {
     if (stopWords.has(w)) return false;
     // Each word should start with uppercase and contain at least one letter.
     if (!/^[A-Z][a-zA-Z.'-]*$/.test(w)) return false;
   }
+  // Reject leaked markup/CSS and duplicated-content names (e.g. a page's
+  // title repeating "Name ... Name" back to back).
+  if (/[{}@#;]|--[a-z]|px[,)]?$|\d{3,}/i.test(name)) return false;
+  const coreWords = words
+    .map((w) => w.toLowerCase().replace(/[.'-]/g, ""))
+    .filter((w) => !CONNECTOR_WORDS.has(w));
+  if (new Set(coreWords).size < coreWords.length) return false;
   return true;
 }

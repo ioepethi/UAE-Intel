@@ -374,8 +374,13 @@ function extractNamesFromText(text: string, result: SearchResult): string[] {
   const names: string[] = [];
 
   // Pattern 1: "Mr. / H.E. / Dr. / Sheikh Name Name Name"
+  // NOTE: word-separating whitespace is deliberately restricted to spaces/
+  // tabs (not \s, which also matches newlines). Tavily's cleaned page text
+  // is full of blank-line-separated paragraphs (e.g. "Riseup Labs\n\nLinkedin\n\n
+  // Ershadul Hoque, CEO of Riseup Labs") — allowing \n inside a name capture
+  // let unrelated words from different lines merge into one bogus "name".
   const prefixMatches = text.matchAll(
-    /(?:Mr\.|Mrs\.|Ms\.|H\.E\.|Dr\.|Sheikh)\s+([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){1,4})/g,
+    /(?:Mr\.|Mrs\.|Ms\.|H\.E\.|Dr\.|Sheikh)[ \t]+([A-Z][a-zA-Z.'-]+(?:[ \t]+[A-Z][a-zA-Z.'-]+){1,4})/g,
   );
   for (const m of prefixMatches) {
     if (m[1]) names.push(m[1].trim());
@@ -383,7 +388,7 @@ function extractNamesFromText(text: string, result: SearchResult): string[] {
 
   // Pattern 2: "Name Name — CEO" or "Name Name | CEO" or "Name Name, CEO"
   const titleMatches = text.matchAll(
-    /([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){1,4})\s*(?:[-–,|])\s*(?:Group\s+)?(?:Chief\s+)?(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director|Owner|Partner|Investor|Executive)/g,
+    /([A-Z][a-zA-Z.'-]+(?:[ \t]+[A-Z][a-zA-Z.'-]+){1,4})[ \t]*(?:[-–,|])[ \t]*(?:Group[ \t]+)?(?:Chief[ \t]+)?(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director|Owner|Partner|Investor|Executive)/g,
   );
   for (const m of titleMatches) {
     if (m[1]) names.push(m[1].trim());
@@ -427,21 +432,25 @@ function extractNamesFromText(text: string, result: SearchResult): string[] {
 function extractCompanyFromContext(text: string, name: string): string | null {
   // Look for "Name, CEO of Company" or "Name — CEO, Company" or "CEO at Company"
   // Only match clean company names (proper nouns, not sentence fragments).
+  // As with name extraction, whitespace between words is restricted to
+  // spaces/tabs so a match can never span across a paragraph break — that
+  // was letting stray text (including raw CSS from badly-rendered pages)
+  // get glued onto the end of a legitimate company name.
   const patterns = [
-    new RegExp(`${escapeRegex(name)}[\\s,]*(?:[-–,|])?\\s*(?:Group\\s+)?(?:Chief\\s+)?(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director|Owner|Partner|Executive)[\\s,]*(?:of|at)\\s+([A-Z][\\w&'.-]+(?:\\s+[A-Z&][\\w&'.-]+){0,4})`, "i"),
-    /(?:CEO|Founder|Managing Director|Chairman|Director|Owner|Partner|Executive)\s+(?:of|at)\s+([A-Z][\w&'.-]+(?:\s+[A-Z&][\w&'.-]+){0,4})/i,
+    new RegExp(`${escapeRegex(name)}[ \\t,]*(?:[-–,|])?[ \\t]*(?:Group[ \\t]+)?(?:Chief[ \\t]+)?(?:CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director|Owner|Partner|Executive)[ \\t,]*(?:of|at)[ \\t]+([A-Z][\\w&'.-]+(?:[ \\t]+[A-Z&][\\w&'.-]+){0,4})`, "i"),
+    /(?:CEO|Founder|Managing Director|Chairman|Director|Owner|Partner|Executive)[ \t]+(?:of|at)[ \t]+([A-Z][\w&'.-]+(?:[ \t]+[A-Z&][\w&'.-]+){0,4})/i,
   ];
   for (const p of patterns) {
     const m = text.match(p);
     if (m && m[1]) {
       let company = m[1].trim();
-      // Clean up newlines and extra whitespace.
+      // Clean up newlines and extra whitespace (shouldn't be any now, but
+      // stay defensive).
       company = company.replace(/[\n\r]+/g, " ").replace(/\s+/g, " ").trim();
       // Clean up trailing prepositions/articles.
       company = company.replace(/\s+(?:at|in|on|with|for|the|a|an)$/i, "");
       company = company.replace(/[,.;:].*$/, "");
-      // Reject if it's a common word or too short.
-      if (company.length < 3 || isCommonWord(company)) continue;
+      if (company.length < 3 || company.length > 60 || isCommonWord(company)) continue;
       // Reject single common business words as company names.
       const companyStopWords = new Set(["Sales", "Homes", "Societ", "Board"]);
       if (companyStopWords.has(company)) continue;
@@ -449,6 +458,9 @@ function extractCompanyFromContext(text: string, name: string): string | null {
       const words = company.split(/\s+/);
       const hasLowerOnly = words.some((w) => w.length > 2 && /^[a-z]+$/.test(w));
       if (hasLowerOnly) continue;
+      // Reject anything that looks like leaked markup/CSS rather than a name
+      // (e.g. "{h1.entry-title{display:var(...)}}@media(max-width:1024px)").
+      if (looksLikeMarkupOrCode(company)) continue;
       return company;
     }
   }
@@ -457,8 +469,8 @@ function extractCompanyFromContext(text: string, name: string): string | null {
 
 function extractTitleFromContext(text: string, name: string): string | null {
   const patterns = [
-    new RegExp(`${escapeRegex(name)}[\\s,]*(?:[-–,|])?\\s*(?:Group\\s+)?(?:Chief\\s+)?(CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director|Owner|Partner|Investor|Executive)`, "i"),
-    /(?:Group\s+)?(?:Chief\s+)?(CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director|Owner|Partner|Investor|Executive)/i,
+    new RegExp(`${escapeRegex(name)}[ \\t,]*(?:[-–,|])?[ \\t]*(?:Group[ \\t]+)?(?:Chief[ \\t]+)?(CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director|Owner|Partner|Investor|Executive)`, "i"),
+    /(?:Group[ \t]+)?(?:Chief[ \t]+)?(CEO|Chief Executive Officer|Founder|Managing Director|Chairman|Director|Owner|Partner|Investor|Executive)/i,
   ];
   for (const p of patterns) {
     const m = text.match(p);
@@ -469,6 +481,11 @@ function extractTitleFromContext(text: string, name: string): string | null {
     }
   }
   return null;
+}
+
+/** Reject strings that look like leaked CSS/HTML/markup rather than a name. */
+function looksLikeMarkupOrCode(s: string): boolean {
+  return /[{}@#;]|--[a-z]|px[,)]?$|\d{3,}/i.test(s);
 }
 
 function computeDiscoveryConfidence(
@@ -610,12 +627,8 @@ function isCommonWord(s: string): boolean {
   return COMMON_WORDS.has(s.trim());
 }
 
-function isPlausiblePersonName(name: string): boolean {
-  const trimmed = name.trim();
-  const words = trimmed.split(/\s+/);
-  if (words.length < 2 || words.length > 5) return false;
-
-  const stopWords = new Set([
+const NAME_STOP_WORDS = new Set(
+  [
     "and", "the", "of", "with", "serving", "as", "Vice", "concurrently",
     "Community", "Facilities", "Asset", "Management", "Development",
     "Board", "Executive", "Team", "Properties", "Group", "Company",
@@ -628,19 +641,55 @@ function isPlausiblePersonName(name: string): boolean {
     "Americana", "Bank", "Homes", "Life", "Luxury", "Department",
     "Sales", "Societ", "Realty", "Board", "National", "Natio",
     "Zayed", "Rd", "MUDASIR", "WANI",
-  ]);
+    // Region/org acronyms and well-known brand names that occasionally sit
+    // directly next to a person's name in listicle-style pages (e.g.
+    // "Dell Technologies Fahad Al Hassawi", "MENA Hamad Obaid Al Mansoori")
+    // with no punctuation between them for us to split on. Since a real
+    // person's name never starts with one of these, treat the whole
+    // candidate as unreliable rather than guessing where to cut it.
+    "MENA", "GCC", "EMEA", "APAC", "Africa", "Asia", "Europe", "Americas",
+    "Technology", "Technologies", "Software", "Solutions", "Systems",
+    "Holdings", "Global", "International", "Digital", "Innovations",
+    "Dell", "Huawei", "Microsoft", "Oracle", "IBM", "Google", "Amazon",
+    "Cisco", "Samsung", "Apple", "Meta", "SAP", "Lenovo", "Intel", "Nvidia",
+  ].map((w) => w.toLowerCase()),
+);
+
+// Connector words that legitimately repeat in real names (e.g. Arabic
+// naming conventions) and shouldn't trip the duplicate-word guard below.
+const NAME_CONNECTOR_WORDS = new Set([
+  "al", "bin", "ibn", "abdul", "abdel", "el", "de", "van", "der",
+  "dr.", "mr.", "mrs.", "ms.", "h.e.", "sheikh",
+]);
+
+function isPlausiblePersonName(name: string): boolean {
+  const trimmed = name.trim();
+  const words = trimmed.split(/\s+/);
+  if (words.length < 2 || words.length > 5) return false;
 
   for (const w of words) {
-    if (stopWords.has(w)) return false;
+    if (NAME_STOP_WORDS.has(w.toLowerCase())) return false;
     if (!/^[A-Z][a-zA-Z.'-]*$/.test(w)) return false;
   }
 
   // Reject if the name is actually a phrase (all words are common business terms).
-  const personWords = words.filter((w) => !stopWords.has(w));
+  const personWords = words.filter((w) => !NAME_STOP_WORDS.has(w.toLowerCase()));
   if (personWords.length < 2) return false;
 
   // Reject names that are too long to be a single name (likely a sentence fragment).
   if (trimmed.length > 40) return false;
+
+  // Reject leaked markup/CSS masquerading as a name.
+  if (looksLikeMarkupOrCode(trimmed)) return false;
+
+  // Reject duplicated-content names, e.g. "Shamsheer Vayalil Dr Shamsheer
+  // Vayalil" — a real page's title/meta tags occasionally repeat the same
+  // name twice, which our word-based extraction would otherwise accept as
+  // a single (garbled) name.
+  const coreWords = words
+    .map((w) => w.toLowerCase().replace(/[.'-]/g, ""))
+    .filter((w) => !NAME_CONNECTOR_WORDS.has(w));
+  if (new Set(coreWords).size < coreWords.length) return false;
 
   return true;
 }
