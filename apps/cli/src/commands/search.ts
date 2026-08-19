@@ -13,8 +13,8 @@ export interface SearchArgs {
 }
 
 export async function search(args: SearchArgs): Promise<void> {
-  const db = getDb();
-  const persons = searchPersons(db, {
+  const db = await getDb();
+  const persons = await searchPersons(db, {
     name: args.name,
     title: args.title,
     company: args.company,
@@ -22,8 +22,7 @@ export async function search(args: SearchArgs): Promise<void> {
     industry: args.industry as never,
     minConfidence: args.minConfidence ? Number(args.minConfidence) : undefined,
   });
-  const companies = args.company ? findCompaniesByName(db, args.company) : [];
-  db.close();
+  const companies = args.company ? await findCompaniesByName(db, args.company) : [];
 
   if (persons.length === 0 && companies.length === 0) {
     console.log("No local records found. Run a research command first.");

@@ -1,0 +1,9 @@
+name = "uae-intel-web"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+[[d1_databases]]
+binding = "UAE_INTEL_DB"
+database_name = "uae-intel-db"
+database_id = "e5f66e09-523a-4e2f-bfea-a8216c8e4f8c"

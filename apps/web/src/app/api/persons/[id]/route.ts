@@ -3,16 +3,17 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/server";
 import { getPerson, rolesForPerson, contactsForPerson, relationshipsForPerson } from "@uae-intel/db";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const db = getDb();
-  const id = Number(params.id);
-  const person = getPerson(db, id);
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: idStr } = await params;
+  const db = await getDb();
+  const id = Number(idStr);
+  const person = await getPerson(db, id);
   if (!person) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const roles = rolesForPerson(db, id);
-  const contacts = contactsForPerson(db, id);
-  const relationships = relationshipsForPerson(db, id);
+  const roles = await rolesForPerson(db, id);
+  const contacts = await contactsForPerson(db, id);
+  const relationships = await relationshipsForPerson(db, id);
   return NextResponse.json({ person, roles, contacts, relationships });
 }

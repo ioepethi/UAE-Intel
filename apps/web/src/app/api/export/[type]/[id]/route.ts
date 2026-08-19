@@ -11,20 +11,20 @@ import {
   contactsForCompany,
 } from "@uae-intel/db";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, { params }: { params: { type: string; id: string } }) {
-  const db = getDb();
-  const id = Number(params.id);
-  const type = params.type;
+export async function GET(_req: Request, { params }: { params: Promise<{ type: string; id: string }> }) {
+  const { type, id: idStr } = await params;
+  const db = await getDb();
+  const id = Number(idStr);
 
   if (type === "person") {
-    const person = getPerson(db, id);
+    const person = await getPerson(db, id);
     if (!person) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const roles = rolesForPerson(db, id);
-    const contacts = contactsForPerson(db, id);
-    const relationships = relationshipsForPerson(db, id);
+    const roles = await rolesForPerson(db, id);
+    const contacts = await contactsForPerson(db, id);
+    const relationships = await relationshipsForPerson(db, id);
     const data = { person, roles, contacts, relationships, exported_at: new Date().toISOString() };
     return new NextResponse(JSON.stringify(data, null, 2), {
       headers: {
@@ -35,10 +35,10 @@ export async function GET(_req: Request, { params }: { params: { type: string; i
   }
 
   if (type === "company") {
-    const company = getCompany(db, id);
+    const company = await getCompany(db, id);
     if (!company) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const roles = rolesForCompany(db, id);
-    const contacts = contactsForCompany(db, id);
+    const roles = await rolesForCompany(db, id);
+    const contacts = await contactsForCompany(db, id);
     const data = { company, roles, contacts, exported_at: new Date().toISOString() };
     return new NextResponse(JSON.stringify(data, null, 2), {
       headers: {

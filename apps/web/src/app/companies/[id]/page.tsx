@@ -3,29 +3,29 @@ import { getCompany, rolesForCompany, contactsForCompany } from "@uae-intel/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-export default function CompanyPage({ params }: { params: { id: string } }) {
-  const db = getDb();
-  const id = Number(params.id);
-  const company = getCompany(db, id);
+export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: idStr } = await params;
+  const db = await getDb();
+  const id = Number(idStr);
+  const company = await getCompany(db, id);
   if (!company) {
-    db.close();
     notFound();
   }
-  const roles = rolesForCompany(db, id) as Array<{
+  const roles = (await rolesForCompany(db, id)) as Array<{
     title: string;
     person_name: string;
     person_id: number;
     start_date: string | null;
     end_date: string | null;
   }>;
-  const contacts = contactsForCompany(db, id) as Array<{
+  const contacts = (await contactsForCompany(db, id)) as Array<{
     type: string;
     value: string;
     verification: string;
   }>;
-  db.close();
 
   return (
     <div>

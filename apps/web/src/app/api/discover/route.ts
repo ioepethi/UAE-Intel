@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { DiscoveryEngine, TavilyProvider, HtmlFetcher } from "@uae-intel/research";
 import type { Emirate, Industry, Position } from "@uae-intel/core";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {

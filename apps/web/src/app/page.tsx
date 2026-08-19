@@ -2,25 +2,26 @@ import { getDb } from "@/lib/server";
 import { searchPersons, findCompaniesByName } from "@uae-intel/db";
 import Link from "next/link";
 
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-export default function DashboardPage({
+export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { name?: string; company?: string; emirate?: string; industry?: string };
+  searchParams: Promise<{ name?: string; company?: string; emirate?: string; industry?: string }>;
 }) {
-  const db = getDb();
-  const persons = searchParams.name
-    ? searchPersons(db, {
-        name: searchParams.name,
-        emirate: searchParams.emirate as never,
-        industry: searchParams.industry as never,
-      })
+  const sp = await searchParams;
+  const db = await getDb();
+  const persons = sp.name
+    ? await searchPersons(db, {
+      name: sp.name,
+      emirate: sp.emirate as never,
+      industry: sp.industry as never,
+    })
     : [];
-  const companies = searchParams.company
-    ? findCompaniesByName(db, searchParams.company)
+  const companies = sp.company
+    ? await findCompaniesByName(db, sp.company)
     : [];
-  db.close();
 
   return (
     <div>
@@ -29,15 +30,15 @@ export default function DashboardPage({
         <form method="get" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
           <div className="form-group" style={{ flex: "1 1 200px", margin: 0 }}>
             <label htmlFor="name">Person name</label>
-            <input id="name" name="name" defaultValue={searchParams.name ?? ""} placeholder="e.g. Mohammed Al-Falasi" />
+            <input id="name" name="name" defaultValue={sp.name ?? ""} placeholder="e.g. Mohammed Al-Falasi" />
           </div>
           <div className="form-group" style={{ flex: "1 1 200px", margin: 0 }}>
             <label htmlFor="company">Company</label>
-            <input id="company" name="company" defaultValue={searchParams.company ?? ""} placeholder="e.g. Emaar Properties" />
+            <input id="company" name="company" defaultValue={sp.company ?? ""} placeholder="e.g. Emaar Properties" />
           </div>
           <div className="form-group" style={{ flex: "1 1 120px", margin: 0 }}>
             <label htmlFor="emirate">Emirate</label>
-            <select id="emirate" name="emirate" defaultValue={searchParams.emirate ?? ""}>
+            <select id="emirate" name="emirate" defaultValue={sp.emirate ?? ""}>
               <option value="">Any</option>
               <option>Dubai</option>
               <option>Abu Dhabi</option>
@@ -114,7 +115,7 @@ export default function DashboardPage({
         </div>
       )}
 
-      {!searchParams.name && !searchParams.company && (
+      {!sp.name && !sp.company && (
         <div className="empty">
           <h3>No search yet</h3>
           <p>

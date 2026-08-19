@@ -1,33 +1,15 @@
 // SQLite schema for the UAE Intelligence system.
 // Mirrors §11 DATABASE STRUCTURE of the master prompt.
-// Uses better-sqlite3 directly (no ORM) per "simple over clever" — the schema is small and stable.
+// Schema SQL is shared between better-sqlite3 (local) and Cloudflare D1 (production).
+// NOTE: This file must NOT import better-sqlite3 — it's used on edge runtime too.
 
-import Database from "better-sqlite3";
-import { resolve } from "node:path";
-
-export interface DbConfig {
-  /** Path to the SQLite file. Defaults to ./uae-intel.sqlite */
-  path?: string;
-  /** When true, log SQL statements (dev only). */
-  verbose?: boolean;
-}
-
-export function openDb(config: DbConfig = {}): Database.Database {
-  const path = config.path ?? resolve(process.cwd(), "uae-intel.sqlite");
-  const db = new Database(path);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  if (config.verbose) {
-    db.on("trace", (sql) => console.debug("[sql]", sql));
-  }
-  return db;
-}
+import type { DbClient } from "./client.js";
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS persons (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name TEXT NOT NULL,
-  name_variations TEXT NOT NULL DEFAULT '[]',   -- JSON array
+  name_variations TEXT NOT NULL DEFAULT '[]',
   current_title TEXT,
   location TEXT,
   linkedin_url TEXT,
@@ -106,6 +88,13 @@ CREATE INDEX IF NOT EXISTS idx_contacts_company ON contacts(company_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_person ON relationships(person_id);
 `;
 
-export function migrate(db: Database.Database): void {
-  db.exec(SCHEMA_SQL);
+export async function migrate(db: DbClient): Promise<void> {
+  // D1's exec() does not support multiple statements separated by newlines
+  // in all versions; split on semicolons and run each statement individually.
+  const statements = SCHEMA_SQL.split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  for (const stmt of statements) {
+    await db.exec(stmt + ";");
+  }
 }

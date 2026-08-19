@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
+    "build:cf": "npx @cloudflare/next-on-pages",
     "start": "next start -p 3000",
+    "preview": "wrangler pages dev .vercel/output/static --compatibility-flag=nodejs_compat",
+    "deploy": "npm run build:cf && wrangler pages deploy .vercel/output/static",
     "test": "node --test dist/**/*.test.js"
   },
   "dependencies": {
@@ -14,11 +17,12 @@
     "@uae-intel/db": "*",
     "@uae-intel/report": "*",
     "@uae-intel/research": "*",
-    "next": "^14.2.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "next": "15.5.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.16",
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

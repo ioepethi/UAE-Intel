@@ -24,3 +24,4 @@ npm-debug.log*
 
 # Google App Engine generated folder
 appengine-generated/
+.vercel/

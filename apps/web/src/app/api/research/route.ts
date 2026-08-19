@@ -4,7 +4,7 @@ import { ResearchEngine, TavilyProvider, HtmlFetcher } from "@uae-intel/research
 import { generateReport } from "@uae-intel/report";
 import type { ResearchDepth } from "@uae-intel/core";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {

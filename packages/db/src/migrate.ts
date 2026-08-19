@@ -1,7 +1,7 @@
 // Standalone migration entrypoint: `npm run db:push` from repo root.
-import { openDb, migrate } from "./index.js";
+// Applies the schema to the local SQLite database.
+import { openBetterSqlite, migrate } from "./local.js";
 
-const db = openDb();
-migrate(db);
-console.log("Database schema applied.");
-db.close();
+const db = openBetterSqlite();
+await migrate(db);
+console.log("Local database schema applied.");

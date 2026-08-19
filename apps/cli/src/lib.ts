@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readFileSync, writeFileSync } from "node:fs";
 import { ResearchEngine, TavilyProvider, HtmlFetcher } from "@uae-intel/research";
-import { openDb, migrate } from "@uae-intel/db";
+import { openBetterSqlite, migrate } from "@uae-intel/db/local";
+import type { DbClient } from "@uae-intel/db";
 import type { ResearchDepth } from "@uae-intel/core";
-import type Database from "better-sqlite3";
 
 export function loadEnv(path = ".env"): void {
   try {
@@ -31,9 +31,9 @@ export function getEngine(): ResearchEngine {
   return new ResearchEngine(search, fetcher);
 }
 
-export function getDb(): Database.Database {
-  const db = openDb({ path: process.env.DATABASE_URL });
-  migrate(db);
+export async function getDb(): Promise<DbClient> {
+  const db = openBetterSqlite({ path: process.env.DATABASE_URL });
+  await migrate(db);
   return db;
 }
 

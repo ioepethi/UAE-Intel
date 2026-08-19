@@ -1,7 +1,8 @@
 // Repository functions: typed CRUD + search queries for the UAE Intel DB.
 // Implements §12 SEARCH DATABASE and §13 FILTERS of the master prompt.
+// All functions are async and use the unified DbClient (better-sqlite3 or D1).
 
-import type Database from "better-sqlite3";
+import type { DbClient } from "./client.js";
 import type {
   Company,
   Contact,
@@ -15,56 +16,66 @@ import type {
 
 // ---------- Sources ----------
 
-export function insertSource(
-  db: Database.Database,
+export async function insertSource(
+  db: DbClient,
   s: Omit<Source, "id">,
-): number {
-  const stmt = db.prepare(
-    `INSERT INTO sources (url, name, source_type, reliability, date_accessed, confirms)
-     VALUES (@url, @name, @source_type, @reliability, @date_accessed, @confirms)`,
-  );
-  return Number(stmt.run(s).lastInsertRowid);
+): Promise<number> {
+  const res = await db
+    .prepare(
+      `INSERT INTO sources (url, name, source_type, reliability, date_accessed, confirms)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(s.url, s.name, s.source_type, s.reliability, s.date_accessed, s.confirms)
+    .run();
+  return res.meta.last_row_id;
 }
 
-export function getSource(db: Database.Database, id: number): Source | undefined {
-  return db.prepare(`SELECT * FROM sources WHERE id = ?`).get(id) as
-    | Source
-    | undefined;
+export async function getSource(db: DbClient, id: number): Promise<Source | undefined> {
+  return db.prepare(`SELECT * FROM sources WHERE id = ?`).bind(id).first<Source>();
 }
 
 // ---------- Persons ----------
 
-export function insertPerson(
-  db: Database.Database,
+export async function insertPerson(
+  db: DbClient,
   p: Omit<Person, "id" | "created_at" | "updated_at">,
-): number {
-  const stmt = db.prepare(
-    `INSERT INTO persons (full_name, name_variations, current_title, location, linkedin_url, confidence_score)
-     VALUES (@full_name, @name_variations, @current_title, @location, @linkedin_url, @confidence_score)`,
-  );
-  return Number(
-    stmt.run({
-      ...p,
-      name_variations: JSON.stringify(p.name_variations ?? []),
-    }).lastInsertRowid,
-  );
+): Promise<number> {
+  const res = await db
+    .prepare(
+      `INSERT INTO persons (full_name, name_variations, current_title, location, linkedin_url, confidence_score)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      p.full_name,
+      JSON.stringify(p.name_variations ?? []),
+      p.current_title ?? null,
+      p.location ?? null,
+      p.linkedin_url ?? null,
+      p.confidence_score,
+    )
+    .run();
+  return res.meta.last_row_id;
 }
 
-export function getPerson(db: Database.Database, id: number): Person | undefined {
-  const row = db.prepare(`SELECT * FROM persons WHERE id = ?`).get(id) as
-    | (Person & { name_variations: string })
-    | undefined;
+export async function getPerson(db: DbClient, id: number): Promise<Person | undefined> {
+  const row = await db
+    .prepare(`SELECT * FROM persons WHERE id = ?`)
+    .bind(id)
+    .first<Person & { name_variations: string }>();
   if (!row) return undefined;
   return { ...row, name_variations: JSON.parse(row.name_variations) };
 }
 
-export function findPersonsByName(
-  db: Database.Database,
+export async function findPersonsByName(
+  db: DbClient,
   name: string,
-): Person[] {
-  const rows = db
-    .prepare(`SELECT * FROM persons WHERE lower(full_name) LIKE ? ORDER BY confidence_score DESC`)
-    .all(`%${name.toLowerCase()}%`) as (Person & { name_variations: string })[];
+): Promise<Person[]> {
+  const rows = await db
+    .prepare(
+      `SELECT * FROM persons WHERE lower(full_name) LIKE ? ORDER BY confidence_score DESC`,
+    )
+    .bind(`%${name.toLowerCase()}%`)
+    .all<Person & { name_variations: string }>();
   return rows.map((r) => ({
     ...r,
     name_variations: JSON.parse(r.name_variations),
@@ -73,105 +84,153 @@ export function findPersonsByName(
 
 // ---------- Companies ----------
 
-export function insertCompany(
-  db: Database.Database,
+export async function insertCompany(
+  db: DbClient,
   c: Omit<Company, "id" | "created_at" | "updated_at">,
-): number {
-  const stmt = db.prepare(
-    `INSERT INTO companies (legal_name, trading_name, website, domain, industry, emirate, location, confidence_score)
-     VALUES (@legal_name, @trading_name, @website, @domain, @industry, @emirate, @location, @confidence_score)`,
-  );
-  return Number(stmt.run(c).lastInsertRowid);
+): Promise<number> {
+  const res = await db
+    .prepare(
+      `INSERT INTO companies (legal_name, trading_name, website, domain, industry, emirate, location, confidence_score)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      c.legal_name,
+      c.trading_name ?? null,
+      c.website ?? null,
+      c.domain ?? null,
+      c.industry ?? null,
+      c.emirate ?? null,
+      c.location ?? null,
+      c.confidence_score,
+    )
+    .run();
+  return res.meta.last_row_id;
 }
 
-export function getCompany(
-  db: Database.Database,
+export async function getCompany(
+  db: DbClient,
   id: number,
-): Company | undefined {
-  return db.prepare(`SELECT * FROM companies WHERE id = ?`).get(id) as
-    | Company
-    | undefined;
+): Promise<Company | undefined> {
+  return db.prepare(`SELECT * FROM companies WHERE id = ?`).bind(id).first<Company>();
 }
 
-export function findCompaniesByName(
-  db: Database.Database,
+export async function findCompaniesByName(
+  db: DbClient,
   name: string,
-): Company[] {
+): Promise<Company[]> {
+  const like = `%${name.toLowerCase()}%`;
   return db
     .prepare(
       `SELECT * FROM companies WHERE lower(legal_name) LIKE ? OR lower(trading_name) LIKE ? ORDER BY confidence_score DESC`,
     )
-    .all(`%${name.toLowerCase()}%`, `%${name.toLowerCase()}%`) as Company[];
+    .bind(like, like)
+    .all<Company>();
 }
 
 // ---------- Roles ----------
 
-export function insertRole(
-  db: Database.Database,
+export async function insertRole(
+  db: DbClient,
   r: Omit<Role, "id">,
-): number {
-  const stmt = db.prepare(
-    `INSERT INTO roles (person_id, company_id, title, start_date, end_date, source_id, confidence)
-     VALUES (@person_id, @company_id, @title, @start_date, @end_date, @source_id, @confidence)`,
-  );
-  return Number(stmt.run(r).lastInsertRowid);
+): Promise<number> {
+  const res = await db
+    .prepare(
+      `INSERT INTO roles (person_id, company_id, title, start_date, end_date, source_id, confidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      r.person_id,
+      r.company_id,
+      r.title,
+      r.start_date ?? null,
+      r.end_date ?? null,
+      r.source_id,
+      r.confidence,
+    )
+    .run();
+  return res.meta.last_row_id;
 }
 
-export function rolesForPerson(db: Database.Database, personId: number) {
+export async function rolesForPerson(db: DbClient, personId: number) {
   return db
     .prepare(
       `SELECT r.*, c.legal_name AS company_name
        FROM roles r JOIN companies c ON r.company_id = c.id
        WHERE r.person_id = ? ORDER BY r.end_date IS NULL DESC, r.end_date DESC`,
     )
-    .all(personId);
+    .bind(personId)
+    .all();
 }
 
-export function rolesForCompany(db: Database.Database, companyId: number) {
+export async function rolesForCompany(db: DbClient, companyId: number) {
   return db
     .prepare(
       `SELECT r.*, p.full_name AS person_name
        FROM roles r JOIN persons p ON r.person_id = p.id
        WHERE r.company_id = ? ORDER BY r.end_date IS NULL DESC, r.end_date DESC`,
     )
-    .all(companyId);
+    .bind(companyId)
+    .all();
 }
 
 // ---------- Contacts ----------
 
-export function insertContact(
-  db: Database.Database,
+export async function insertContact(
+  db: DbClient,
   c: Omit<Contact, "id">,
-): number {
-  const stmt = db.prepare(
-    `INSERT INTO contacts (person_id, company_id, type, value, classification, source_id, verification, confidence, last_verified)
-     VALUES (@person_id, @company_id, @type, @value, @classification, @source_id, @verification, @confidence, @last_verified)`,
-  );
-  return Number(stmt.run(c).lastInsertRowid);
+): Promise<number> {
+  const res = await db
+    .prepare(
+      `INSERT INTO contacts (person_id, company_id, type, value, classification, source_id, verification, confidence, last_verified)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      c.person_id ?? null,
+      c.company_id ?? null,
+      c.type,
+      c.value,
+      c.classification,
+      c.source_id,
+      c.verification,
+      c.confidence,
+      c.last_verified,
+    )
+    .run();
+  return res.meta.last_row_id;
 }
 
-export function contactsForPerson(db: Database.Database, personId: number) {
-  return db.prepare(`SELECT * FROM contacts WHERE person_id = ?`).all(personId);
+export async function contactsForPerson(db: DbClient, personId: number) {
+  return db.prepare(`SELECT * FROM contacts WHERE person_id = ?`).bind(personId).all();
 }
 
-export function contactsForCompany(db: Database.Database, companyId: number) {
-  return db.prepare(`SELECT * FROM contacts WHERE company_id = ?`).all(companyId);
+export async function contactsForCompany(db: DbClient, companyId: number) {
+  return db.prepare(`SELECT * FROM contacts WHERE company_id = ?`).bind(companyId).all();
 }
 
 // ---------- Relationships ----------
 
-export function insertRelationship(
-  db: Database.Database,
+export async function insertRelationship(
+  db: DbClient,
   r: Omit<Relationship, "id">,
-): number {
-  const stmt = db.prepare(
-    `INSERT INTO relationships (person_id, related_person_id, related_company_id, relationship_type, source_id, confidence)
-     VALUES (@person_id, @related_person_id, @related_company_id, @relationship_type, @source_id, @confidence)`,
-  );
-  return Number(stmt.run(r).lastInsertRowid);
+): Promise<number> {
+  const res = await db
+    .prepare(
+      `INSERT INTO relationships (person_id, related_person_id, related_company_id, relationship_type, source_id, confidence)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      r.person_id,
+      r.related_person_id ?? null,
+      r.related_company_id ?? null,
+      r.relationship_type,
+      r.source_id,
+      r.confidence,
+    )
+    .run();
+  return res.meta.last_row_id;
 }
 
-export function relationshipsForPerson(db: Database.Database, personId: number) {
+export async function relationshipsForPerson(db: DbClient, personId: number) {
   return db
     .prepare(
       `SELECT rel.*,
@@ -182,7 +241,8 @@ export function relationshipsForPerson(db: Database.Database, personId: number) 
        LEFT JOIN companies c ON rel.related_company_id = c.id
        WHERE rel.person_id = ?`,
     )
-    .all(personId);
+    .bind(personId)
+    .all();
 }
 
 // ---------- Filtered search (§13) ----------
@@ -197,48 +257,52 @@ export interface PersonSearchFilters {
   minConfidence?: number;
 }
 
-export function searchPersons(
-  db: Database.Database,
+export async function searchPersons(
+  db: DbClient,
   filters: PersonSearchFilters,
-): Person[] {
+): Promise<Person[]> {
   const where: string[] = [];
-  const params: Record<string, unknown> = {};
+  const params: unknown[] = [];
   if (filters.name) {
-    where.push("lower(p.full_name) LIKE @name");
-    params.name = `%${filters.name.toLowerCase()}%`;
+    where.push("lower(p.full_name) LIKE ?");
+    params.push(`%${filters.name.toLowerCase()}%`);
   }
   if (filters.title) {
-    where.push("lower(p.current_title) LIKE @title");
-    params.title = `%${filters.title.toLowerCase()}%`;
+    where.push("lower(p.current_title) LIKE ?");
+    params.push(`%${filters.title.toLowerCase()}%`);
   }
   if (filters.linkedin) {
-    where.push("p.linkedin_url LIKE @linkedin");
-    params.linkedin = `%${filters.linkedin}%`;
+    where.push("p.linkedin_url LIKE ?");
+    params.push(`%${filters.linkedin}%`);
   }
   if (filters.minConfidence != null) {
-    where.push("p.confidence_score >= @minConfidence");
-    params.minConfidence = filters.minConfidence;
+    where.push("p.confidence_score >= ?");
+    params.push(filters.minConfidence);
   }
   if (filters.company || filters.emirate || filters.industry) {
-    where.push("EXISTS (SELECT 1 FROM roles r JOIN companies c ON r.company_id = c.id WHERE r.person_id = p.id");
+    where.push(
+      "EXISTS (SELECT 1 FROM roles r JOIN companies c ON r.company_id = c.id WHERE r.person_id = p.id",
+    );
     if (filters.company) {
-      where.push("AND lower(c.legal_name) LIKE @company");
-      params.company = `%${filters.company.toLowerCase()}%`;
+      where.push("AND lower(c.legal_name) LIKE ?");
+      params.push(`%${filters.company.toLowerCase()}%`);
     }
     if (filters.emirate) {
-      where.push("AND c.emirate = @emirate");
-      params.emirate = filters.emirate;
+      where.push("AND c.emirate = ?");
+      params.push(filters.emirate);
     }
     if (filters.industry) {
-      where.push("AND c.industry = @industry");
-      params.industry = filters.industry;
+      where.push("AND c.industry = ?");
+      params.push(filters.industry);
     }
     where.push(")");
   }
-  const sql = `SELECT p.* FROM persons p ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY p.confidence_score DESC`;
-  const rows = db.prepare(sql).all(params) as (Person & {
-    name_variations: string;
-  })[];
+  const sql = `SELECT p.* FROM persons p ${where.length ? "WHERE " + where.join(" AND ") : ""
+    } ORDER BY p.confidence_score DESC`;
+  const rows = await db
+    .prepare(sql)
+    .bind(...params)
+    .all<Person & { name_variations: string }>();
   return rows.map((r) => ({
     ...r,
     name_variations: JSON.parse(r.name_variations),

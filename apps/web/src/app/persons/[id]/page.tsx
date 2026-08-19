@@ -8,17 +8,18 @@ import {
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-export default function PersonPage({ params }: { params: { id: string } }) {
-  const db = getDb();
-  const id = Number(params.id);
-  const person = getPerson(db, id);
+export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: idStr } = await params;
+  const db = await getDb();
+  const id = Number(idStr);
+  const person = await getPerson(db, id);
   if (!person) {
-    db.close();
     notFound();
   }
-  const roles = rolesForPerson(db, id) as Array<{
+  const roles = (await rolesForPerson(db, id)) as Array<{
     title: string;
     company_name: string;
     company_id: number;
@@ -26,20 +27,19 @@ export default function PersonPage({ params }: { params: { id: string } }) {
     end_date: string | null;
     confidence: number;
   }>;
-  const contacts = contactsForPerson(db, id) as Array<{
+  const contacts = (await contactsForPerson(db, id)) as Array<{
     type: string;
     value: string;
     verification: string;
     confidence: number;
     source_id: number;
   }>;
-  const rels = relationshipsForPerson(db, id) as Array<{
+  const rels = (await relationshipsForPerson(db, id)) as Array<{
     relationship_type: string;
     related_person_name: string | null;
     related_company_name: string | null;
     confidence: number;
   }>;
-  db.close();
 
   return (
     <div>

@@ -6,12 +6,23 @@ const nextConfig = {
     "@uae-intel/report",
     "@uae-intel/research",
   ],
-  // better-sqlite3 is a native module — don't bundle it on the server.
+  serverExternalPackages: ["better-sqlite3"],
   experimental: {
-    serverComponentsExternalPackages: ["better-sqlite3"],
     serverActions: {
       bodySizeLimit: "2mb",
     },
+  },
+  webpack: (config, { isServer, nextRuntime }) => {
+    // On edge runtime, better-sqlite3 (native module) cannot be bundled.
+    // Stub it out — it's only used in local dev via @uae-intel/db/local,
+    // which is dynamically imported and never reached on Cloudflare.
+    if (isServer && nextRuntime === "edge") {
+      config.resolve = config.resolve || {};
+      config.resolve.alias = config.resolve.alias || {};
+      config.resolve.alias["better-sqlite3"] = false;
+      config.resolve.alias["@uae-intel/db/local"] = false;
+    }
+    return config;
   },
 };
 

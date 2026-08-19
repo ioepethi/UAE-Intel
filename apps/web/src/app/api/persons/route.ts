@@ -3,13 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/server";
 import { searchPersons } from "@uae-intel/db";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
-  const db = getDb();
-  const persons = searchPersons(db, {
+  const db = await getDb();
+  const persons = await searchPersons(db, {
     name: sp.get("name") ?? undefined,
     title: sp.get("title") ?? undefined,
     company: sp.get("company") ?? undefined,
