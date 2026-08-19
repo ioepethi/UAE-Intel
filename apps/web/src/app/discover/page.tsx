@@ -77,29 +77,45 @@ export default function DiscoverPage() {
 
   return (
     <div>
-      <div className="card">
+      <div className="page-header">
+        <h1>Discover</h1>
+        <p>Bulk search engine for UAE executives with public business contacts.</p>
+      </div>
+
+      {/* Glassmorphism search area */}
+      <div className="search-glass">
         <h2>Discovery Search Engine</h2>
-        <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 16 }}>
+        <p className="subtitle">
           Search for 100+ UAE executives by position, industry, and location. Returns public business contacts only.
         </p>
-        <form onSubmit={handleSearch} style={{ display: "flex", gap: "12px" }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder='e.g. "CEOs of real estate companies in Dubai"'
-            style={{ flex: 1 }}
-            required
-          />
-          <button type="submit" disabled={loading}>
-            {loading ? "Searching…" : "Search"}
-          </button>
+        <form onSubmit={handleSearch}>
+          <div className="search-input-wrap">
+            <input
+              className="search-input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder='e.g. "CEOs of real estate companies in Dubai"'
+              required
+            />
+            <button type="submit" disabled={loading}>
+              {loading ? (
+                <>
+                  <span className="loading-dots">
+                    <span /> <span /> <span />
+                  </span>
+                  Searching
+                </>
+              ) : (
+                "Search"
+              )}
+            </button>
+          </div>
         </form>
-        <div style={{ marginTop: 12, display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <div className="chip-row">
           {EXAMPLE_QUERIES.map((q) => (
             <button
               key={q}
-              className="btn btn-secondary"
-              style={{ fontSize: 12, padding: "4px 10px" }}
+              className="chip"
               onClick={() => setQuery(q)}
               type="button"
             >
@@ -115,9 +131,14 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {loading && (
-        <div className="card">
-          <p style={{ color: "var(--text-muted)" }}>Running discovery searches across multiple sources…</p>
+      {loading && !result && (
+        <div className="glass-card" style={{ textAlign: "center" }}>
+          <p style={{ color: "var(--text-muted)" }}>
+            <span className="loading-dots" style={{ marginRight: 8 }}>
+              <span /> <span /> <span />
+            </span>
+            Running discovery searches across multiple sources…
+          </p>
         </div>
       )}
 
@@ -125,13 +146,13 @@ export default function DiscoverPage() {
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h2>Results: {result.total_found} people found</h2>
-            <button className="btn btn-secondary" onClick={exportCSV} disabled={result.people.length === 0}>
+            <button className="btn btn-secondary btn-sm" onClick={exportCSV} disabled={result.people.length === 0}>
               Export CSV
             </button>
           </div>
 
           {result.unknowns.length > 0 && (
-            <div style={{ marginBottom: 16, padding: "8px 12px", background: "var(--surface-2)", borderRadius: 6, fontSize: 13, color: "var(--text-muted)" }}>
+            <div style={{ marginBottom: 16, padding: "12px 16px", background: "var(--surface-2)", borderRadius: "var(--radius-sm)", fontSize: 13, color: "var(--text-muted)" }}>
               {result.unknowns.map((u, i) => (
                 <div key={i}>⚠ {u}</div>
               ))}

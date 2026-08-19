@@ -25,9 +25,29 @@ export default async function DashboardPage({
 
   return (
     <div>
-      <div className="card">
-        <h2>Search the local intelligence database</h2>
-        <form method="get" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+      <div className="page-header">
+        <h1>Dashboard</h1>
+        <p>Search the local intelligence database or start a new discovery.</p>
+      </div>
+
+      <div className="stats-row">
+        <div className="stat-card">
+          <div className="stat-value">{persons.length}</div>
+          <div className="stat-label">Persons matched</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{companies.length}</div>
+          <div className="stat-label">Companies matched</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">7</div>
+          <div className="stat-label">Emirates covered</div>
+        </div>
+      </div>
+
+      <div className="glass-card">
+        <h2>Search Database</h2>
+        <form method="get" style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "16px" }}>
           <div className="form-group" style={{ flex: "1 1 200px", margin: 0 }}>
             <label htmlFor="name">Person name</label>
             <input id="name" name="name" defaultValue={sp.name ?? ""} placeholder="e.g. Mohammed Al-Falasi" />
@@ -70,7 +90,7 @@ export default async function DashboardPage({
             <tbody>
               {persons.map((p) => (
                 <tr key={p.id}>
-                  <td>
+                  <td style={{ fontWeight: 500 }}>
                     <Link href={`/persons/${p.id}`}>{p.full_name}</Link>
                   </td>
                   <td>{p.current_title ?? "—"}</td>
@@ -100,7 +120,7 @@ export default async function DashboardPage({
             <tbody>
               {companies.map((c) => (
                 <tr key={c.id}>
-                  <td>
+                  <td style={{ fontWeight: 500 }}>
                     <Link href={`/companies/${c.id}`}>{c.legal_name}</Link>
                   </td>
                   <td>{c.industry ?? "—"}</td>
@@ -120,7 +140,7 @@ export default async function DashboardPage({
           <h3>No search yet</h3>
           <p>
             Search for a person or company above, or{" "}
-            <Link href="/research">start a new research request</Link>.
+            <Link href="/discover">start a new discovery</Link>.
           </p>
         </div>
       )}

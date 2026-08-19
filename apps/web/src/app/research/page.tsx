@@ -46,9 +46,14 @@ export default function ResearchPage() {
 
   return (
     <div>
-      <div className="card">
+      <div className="page-header">
+        <h1>Deep Research</h1>
+        <p>In-depth research on a specific person or company with sourced confidence scoring.</p>
+      </div>
+
+      <div className="glass-card">
         <h2>New Research Request</h2>
-        <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 16 }}>
+        <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 20 }}>
           Public business data only. No auth bypass, no private LinkedIn, no fabricated contacts.
         </p>
         <form onSubmit={handleSubmit}>
@@ -84,7 +89,16 @@ export default function ResearchPage() {
             </div>
           </div>
           <button type="submit" disabled={loading || !name}>
-            {loading ? "Researching…" : "Run Research"}
+            {loading ? (
+              <>
+                <span className="loading-dots">
+                  <span /> <span /> <span />
+                </span>
+                Researching
+              </>
+            ) : (
+              "Run Research"
+            )}
           </button>
         </form>
       </div>
@@ -99,7 +113,7 @@ export default function ResearchPage() {
       {result && (
         <div className="card">
           <h2>Report</h2>
-          <div style={{ display: "flex", gap: "16px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
             <span className="badge badge-success">Identity: {result.identity_confidence}%</span>
             <span className="badge badge-muted">{result.contacts_found} contacts</span>
             <span className="badge badge-muted">{result.sources_count} sources</span>

@@ -43,32 +43,48 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
 
   return (
     <div>
-      <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h2>{person!.full_name}</h2>
-            <p style={{ color: "var(--text-muted)" }}>
-              {person!.current_title ?? "Title not verified"} · {person!.location ?? "Location not verified"}
-            </p>
-            {person!.linkedin_url && (
-              <p>
-                <a href={person!.linkedin_url}>LinkedIn profile</a>
-              </p>
-            )}
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Identity confidence</div>
-            <span className={`badge ${person!.confidence_score >= 75 ? "badge-success" : person!.confidence_score >= 50 ? "badge-warning" : "badge-error"}`}>
-              {person!.confidence_score}%
-            </span>
+      <div className="page-header">
+        <h1>{person!.full_name}</h1>
+        <p>{person!.current_title ?? "Title not verified"} · {person!.location ?? "Location not verified"}</p>
+      </div>
+
+      <div className="stats-row">
+        <div className="stat-card">
+          <div className="stat-value">{person!.confidence_score}%</div>
+          <div className="stat-label">Identity confidence</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{roles.length}</div>
+          <div className="stat-label">Roles</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{contacts.length}</div>
+          <div className="stat-label">Contacts</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{rels.length}</div>
+          <div className="stat-label">Relationships</div>
+        </div>
+      </div>
+
+      {person!.linkedin_url && (
+        <div className="glass-card" style={{ marginBottom: 20 }}>
+          <a href={person!.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 500 }}>
+            View LinkedIn Profile →
+          </a>
+        </div>
+      )}
+
+      {person!.name_variations.length > 0 && (
+        <div className="card">
+          <h3>Name variations</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {person!.name_variations.map((v, i) => (
+              <span key={i} className="badge badge-muted">{v}</span>
+            ))}
           </div>
         </div>
-        {person!.name_variations.length > 0 && (
-          <p style={{ marginTop: 12, fontSize: 13, color: "var(--text-muted)" }}>
-            Name variations: {person!.name_variations.join(", ")}
-          </p>
-        )}
-      </div>
+      )}
 
       <div className="grid grid-2">
         <div className="card">
@@ -91,9 +107,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                       <Link href={`/companies/${r.company_id}`}>{r.company_name}</Link>
                     </td>
                     <td>{r.title}</td>
-                    <td>
-                      {r.start_date ?? "?"} — {r.end_date ?? "present"}
-                    </td>
+                    <td>{r.start_date ?? "?"} — {r.end_date ?? "present"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -120,7 +134,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                     <td>{c.type.replace(/_/g, " ")}</td>
                     <td style={{ fontFamily: "var(--mono)", fontSize: 13 }}>{c.value}</td>
                     <td>
-                      <span className={`badge ${c.verification === "VERIFIED" ? "badge-success" : c.verification === "HIGH" ? "badge-success" : c.verification === "MEDIUM" ? "badge-warning" : "badge-error"}`}>
+                      <span className={`badge ${c.verification === "VERIFIED" || c.verification === "HIGH" ? "badge-success" : c.verification === "MEDIUM" ? "badge-warning" : "badge-error"}`}>
                         {c.verification}
                       </span>
                     </td>
@@ -156,8 +170,8 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      <div style={{ marginTop: 16 }}>
-        <a href={`/api/export/person/${id}`} className="btn btn-secondary">Export as JSON</a>
+      <div style={{ marginTop: 20 }}>
+        <a href={`/api/export/person/${id}`} className="btn btn-secondary btn-sm">Export as JSON</a>
       </div>
     </div>
   );

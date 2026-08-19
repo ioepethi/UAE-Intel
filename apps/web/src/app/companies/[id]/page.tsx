@@ -29,30 +29,38 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 
   return (
     <div>
-      <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h2>{company!.legal_name}</h2>
-            <p style={{ color: "var(--text-muted)" }}>
-              {company!.industry ?? "Industry not verified"} · {company!.emirate ?? "Emirate not verified"}
-            </p>
-            {company!.website && (
-              <p>
-                <a href={company!.website}>{company!.website}</a>
-              </p>
-            )}
-            {company!.trading_name && company!.trading_name !== company!.legal_name && (
-              <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Trading as: {company!.trading_name}</p>
-            )}
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Confidence</div>
-            <span className={`badge ${company!.confidence_score >= 75 ? "badge-success" : company!.confidence_score >= 50 ? "badge-warning" : "badge-error"}`}>
-              {company!.confidence_score}%
-            </span>
-          </div>
+      <div className="page-header">
+        <h1>{company!.legal_name}</h1>
+        <p>{company!.industry ?? "Industry not verified"} · {company!.emirate ?? "Emirate not verified"}</p>
+      </div>
+
+      <div className="stats-row">
+        <div className="stat-card">
+          <div className="stat-value">{company!.confidence_score}%</div>
+          <div className="stat-label">Confidence</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{roles.length}</div>
+          <div className="stat-label">People</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{contacts.length}</div>
+          <div className="stat-label">Contacts</div>
         </div>
       </div>
+
+      {company!.website && (
+        <div className="glass-card" style={{ marginBottom: 20 }}>
+          <a href={company!.website} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 500 }}>
+            {company!.website} →
+          </a>
+          {company!.trading_name && company!.trading_name !== company!.legal_name && (
+            <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 8 }}>
+              Trading as: {company!.trading_name}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-2">
         <div className="card">
@@ -75,9 +83,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
                       <Link href={`/persons/${r.person_id}`}>{r.person_name}</Link>
                     </td>
                     <td>{r.title}</td>
-                    <td>
-                      {r.start_date ?? "?"} — {r.end_date ?? "present"}
-                    </td>
+                    <td>{r.start_date ?? "?"} — {r.end_date ?? "present"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -114,8 +120,8 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        <a href={`/api/export/company/${id}`} className="btn btn-secondary">Export as JSON</a>
+      <div style={{ marginTop: 20 }}>
+        <a href={`/api/export/company/${id}`} className="btn btn-secondary btn-sm">Export as JSON</a>
       </div>
     </div>
   );
