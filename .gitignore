@@ -8,6 +8,7 @@ dist/
 .env
 .env.local
 .env.*.local
+apps/web/.env
 *.sqlite
 *.sqlite-journal
 uae-intel.sqlite
@@ -20,6 +21,6 @@ uae-intel.sqlite
 # Logs
 npm-debug.log*
 *.log
-apps/web/.env
-*.sqlite
-*.sqlite-journal
+
+# Google App Engine generated folder
+appengine-generated/
