@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+*.sqlite
+*.sqlite-journal
+uae-intel.sqlite
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+npm-debug.log*
+*.log
+apps/web/.env
+*.sqlite
+*.sqlite-journal

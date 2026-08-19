@@ -1,0 +1,24 @@
+{
+  "name": "uae-intel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UAE Person/Company Intelligence & Business Contact Finder",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "cli": "node apps/cli/dist/index.js",
+    "web:dev": "npm run dev --workspace apps/web",
+    "db:push": "npm run db:push --workspace @uae-intel/db"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "better-sqlite3@11.10.0": true
+  }
+}

@@ -1,0 +1,14 @@
+---
+description: Product context for user-facing features.
+globs: src/**,app/**,pages/**
+alwaysApply: false
+---
+
+# Cursor Rule — Product
+
+Before building user-facing features, read `docs/PRODUCT.md`.
+
+- Do not invent product requirements. If absent, ask.
+- Prefer the smallest change that satisfies the user need.
+- If a feature contradicts the product definition, flag it and ask.
+- Product changes require a change request and an update to `docs/PRODUCT.md`.

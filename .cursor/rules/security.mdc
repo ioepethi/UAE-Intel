@@ -1,0 +1,19 @@
+---
+description: Security rules for sensitive changes.
+globs: **/auth/**,**/security/**,server/**,api/**,**/*.env*
+alwaysApply: true
+---
+
+# Cursor Rule — Security
+
+Follow `.ai/07-security.md`.
+
+- Never place secrets, API keys, tokens, or credentials in source, commits, logs, or images.
+- Use env vars and a secret manager; provide `.env.example` with non-secret placeholders.
+- Use established auth libraries; default-deny; least privilege.
+- Validate all input at trust boundaries.
+- Prevent XSS, CSRF, SQL injection, path traversal, SSRF, open redirects.
+- Validate file uploads (type, size, content); store outside web root.
+- Rate-limit auth, search, and expensive endpoints.
+- Never log PII or credentials.
+- A security review is required for changes touching auth, secrets, PII, uploads, integrations, or infra.

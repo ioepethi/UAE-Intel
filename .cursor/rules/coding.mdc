@@ -1,0 +1,19 @@
+---
+description: Coding standards for all source files.
+globs: src/**,app/**,lib/**,server/**,scripts/**
+alwaysApply: true
+---
+
+# Cursor Rule — Coding
+
+Follow `.ai/04-coding.md`.
+
+- Clear, intention-revealing names.
+- Strict type safety; avoid `any` unless justified.
+- Handle errors at the right boundary; never swallow silently.
+- Never log secrets, tokens, PII.
+- Comments explain WHY, not WHAT; no dead commented code.
+- Check the project already uses a library before adding it; prefer deps ≥ 7 days old; avoid floating ranges.
+- Use env vars for environment-specific values; never hardcode secrets.
+- Reuse before create; avoid premature abstraction.
+- Prefer boring, understandable code over clever code.

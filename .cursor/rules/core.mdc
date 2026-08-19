@@ -1,0 +1,25 @@
+---
+description: Core non-negotiable rules for AI agents. Always loaded.
+globs: *
+alwaysApply: true
+---
+
+# Cursor Rule — Core
+
+Read and follow `AGENTS.md` and `.ai/00-core-rules.md` on every session.
+
+Non-negotiable:
+- Read before write.
+- Do not guess — label `NOT VERIFIED` or ask.
+- Stay in scope; no unrelated refactors.
+- Reuse before create.
+- No secrets in source.
+- Preserve working functionality.
+- Explain architectural changes (ADR in `docs/DECISIONS.md`).
+- Verify before declaring done.
+- Document meaningful changes.
+- Report honestly.
+
+Workflow:
+- Simple task: ANALYZE → IMPLEMENT → VERIFY
+- Major task: ANALYZE → PLAN → APPROVAL → IMPLEMENT → TEST → REVIEW → DOCUMENT

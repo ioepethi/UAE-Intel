@@ -1,0 +1,15 @@
+---
+description: Architecture rules for structural changes.
+globs: src/**,app/**,server/**,lib/**,services/**
+alwaysApply: false
+---
+
+# Cursor Rule — Architecture
+
+Read `.ai/03-architecture.md` and `docs/ARCHITECTURE.md` before structural changes.
+
+- Separation of concerns; one reason to change per module.
+- No silent architectural changes — propose an ADR in `docs/DECISIONS.md`.
+- Get approval before swapping frameworks, databases, or major libraries.
+- Preserve existing interfaces unless explicitly authorized.
+- Prefer boring, proven patterns.

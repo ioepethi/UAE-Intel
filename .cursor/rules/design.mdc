@@ -1,0 +1,17 @@
+---
+description: Design system and DESIGN LOCK enforcement for UI work.
+globs: src/**/*.tsx,src/**/*.css,app/**/*.tsx,styles/**
+alwaysApply: false
+---
+
+# Cursor Rule — Design
+
+Read `.ai/02-design.md` and `docs/DESIGN.md` before UI changes.
+
+- Do not invent new visual patterns when an approved component exists.
+- Design consistency > visual effects.
+- Avoid gradients/animations/glassmorphism/shadows unless they serve a clear purpose.
+- DESIGN LOCK: do not redesign the approved visual identity. You may improve accessibility, responsiveness, spacing, usability, performance, content clarity.
+- Design for loading, empty, error, success, disabled, focus states.
+- Mobile-first; stick to defined breakpoints.
+- Target WCAG 2.2 AA (see `.ai/09-accessibility.md`).

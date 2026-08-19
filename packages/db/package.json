@@ -1,0 +1,27 @@
+{
+  "name": "@uae-intel/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "db:push": "node dist/migrate.js",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "@uae-intel/core": "*",
+    "better-sqlite3": "^11.3.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "typescript": "^5.5.4"
+  }
+}

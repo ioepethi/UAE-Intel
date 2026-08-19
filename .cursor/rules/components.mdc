@@ -1,0 +1,16 @@
+---
+description: Component reuse and documentation rules.
+globs: src/components/**,app/components/**,components/**
+alwaysApply: false
+---
+
+# Cursor Rule — Components
+
+Follow `.ai/05-components.md`.
+
+- Search for an existing component before creating a new one (grep/glob the codebase).
+- Extend, do not fork.
+- Each reusable component documents: purpose, usage, variants, props, states, responsive behavior, accessibility, examples.
+- Props must be typed.
+- Side effects belong in hooks/services, not presentational components.
+- Update `docs/COMPONENTS.md` when adding or significantly changing a component.

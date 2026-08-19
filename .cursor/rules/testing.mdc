@@ -1,0 +1,16 @@
+---
+description: Testing requirements for code changes.
+globs: **/*.test.*,**/*.spec.*,tests/**,test/**
+alwaysApply: true
+---
+
+# Cursor Rule — Testing
+
+Follow `.ai/08-testing.md`.
+
+- Write a failing test first when fixing a bug.
+- Add or update tests for any behavior change.
+- Do not delete tests to make a build pass — fix the cause.
+- Run the test suite before declaring done.
+- Choose the right test level by risk: unit, integration, API, e2e, regression, visual QA, manual.
+- Never use real PII or production data in tests.

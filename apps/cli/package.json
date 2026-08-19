@@ -1,0 +1,24 @@
+{
+  "name": "@uae-intel/cli",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "uae-intel": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "@uae-intel/core": "*",
+    "@uae-intel/db": "*",
+    "@uae-intel/report": "*",
+    "@uae-intel/research": "*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}
