@@ -77,3 +77,26 @@ export async function getDb(): Promise<DbClient> {
 export async function closeDb(): Promise<void> {
   _localDb = null;
 }
+
+/**
+ * Returns a function to schedule background work that must not block the
+ * HTTP response — e.g. persisting discovery results to the DB. On Cloudflare
+ * this uses the platform's ExecutionContext.waitUntil so the worker isn't
+ * killed before the promise settles. Locally it's just fire-and-forget.
+ */
+export async function getWaitUntil(): Promise<(p: Promise<unknown>) => void> {
+  try {
+    const mod = await import("@cloudflare/next-on-pages");
+    if (typeof mod.getRequestContext === "function") {
+      const ctx = mod.getRequestContext().ctx as { waitUntil?: (p: Promise<unknown>) => void };
+      if (ctx?.waitUntil) {
+        return (p: Promise<unknown>) => ctx.waitUntil!(p.catch(() => undefined));
+      }
+    }
+  } catch {
+    // Not on Cloudflare — fall through.
+  }
+  return (p: Promise<unknown>) => {
+    p.catch(() => undefined);
+  };
+}

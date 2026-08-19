@@ -111,6 +111,57 @@ export function extractLinkedIn(
   }));
 }
 
+/**
+ * Extract LinkedIn profile/company URLs from a page's hyperlinks (hrefs).
+ * This is the primary way LinkedIn links are found on fetched pages — the
+ * plain-text extractor above only matches full URLs written out as visible
+ * text, which is rare. Hyperlinked "LinkedIn" text with a href is common,
+ * but the href is only available before HTML stripping (see HtmlFetcher.links).
+ */
+export function extractLinkedInFromLinks(
+  links: string[],
+  source: Source,
+): ContactCandidate[] {
+  const found = new Set<string>();
+  for (const link of links) {
+    if (looksLikeLinkedInUrl(link)) found.add(link.split("?")[0].trim());
+  }
+  return [...found].map((value) => ({
+    type: value.includes("/company/") ? "company_linkedin" : "linkedin",
+    value,
+    classification: "public" as const,
+    verification: "HIGH" as const,
+    confidence: 80,
+    source,
+  }));
+}
+
+/**
+ * Try to find the LinkedIn profile link most likely to belong to a given
+ * person, by matching their name against the profile's URL slug. Returns
+ * null (rather than guessing) if no candidate matches — avoids attributing
+ * the wrong executive's LinkedIn to someone else.
+ */
+export function matchLinkedInToName(
+  candidates: ContactCandidate[],
+  fullName: string,
+): ContactCandidate | null {
+  const profiles = candidates.filter((c) => c.type === "linkedin");
+  if (profiles.length === 0) return null;
+  if (profiles.length === 1) return profiles[0];
+
+  const nameParts = fullName
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((p) => p.length > 1);
+  for (const profile of profiles) {
+    const slugMatch = profile.value.match(/linkedin\.com\/in\/([^/]+)/i);
+    const slug = slugMatch ? slugMatch[1].toLowerCase() : "";
+    if (nameParts.some((part) => slug.includes(part))) return profile;
+  }
+  return null;
+}
+
 /** Extract candidate company website URLs from text. */
 export function extractCompanyUrls(text: string): string[] {
   const found = new Set<string>();

@@ -13,6 +13,7 @@ export interface FetchResult {
   url: string;
   title: string;
   text: string; // plain text, truncated
+  links: string[]; // absolute hyperlink URLs found in the page (hrefs are lost once HTML is stripped)
   status: number;
 }
 

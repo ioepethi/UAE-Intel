@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DiscoveryEngine, TavilyProvider, HtmlFetcher } from "@uae-intel/research";
 import type { Emirate, Industry, Position } from "@uae-intel/core";
+import { getDb, getWaitUntil } from "@/lib/server";
+import { persistDiscoveredPeople } from "@/lib/persist";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -25,8 +27,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Fast, edge-compatible HTTP fetches with a short timeout — the old
+    // 15s/800ms defaults were the main cause of multi-minute searches.
     const search = new TavilyProvider();
-    const fetcher = new HtmlFetcher();
+    const fetcher = new HtmlFetcher({ timeoutMs: 8000, delayMs: 100 });
     const engine = new DiscoveryEngine(search, fetcher);
     const result = await engine.run({
       query: body.query,
@@ -35,6 +39,15 @@ export async function POST(req: NextRequest) {
       emirate: body.emirate as Emirate | undefined,
       maxResults: body.maxResults ?? 100,
     });
+
+    // Save results to the database in the background so they become
+    // browsable/searchable from the Dashboard and Persons/Companies pages.
+    // This must NOT block the response — it's the difference between a
+    // multi-minute request and a multi-second one.
+    const db = await getDb();
+    const waitUntil = await getWaitUntil();
+    waitUntil(persistDiscoveredPeople(db, result.people));
+
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Discovery failed";

@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ResearchEngine, TavilyProvider, HtmlFetcher } from "@uae-intel/research";
 import { generateReport } from "@uae-intel/report";
 import type { ResearchDepth } from "@uae-intel/core";
+import { getDb, getWaitUntil } from "@/lib/server";
+import { persistResearchResult } from "@/lib/persist";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const search = new TavilyProvider();
-    const fetcher = new HtmlFetcher();
+    const fetcher = new HtmlFetcher({ timeoutMs: 8000, delayMs: 100 });
     const engine = new ResearchEngine(search, fetcher);
     const result = await engine.run({
       name: body.name,
@@ -49,6 +51,13 @@ export async function POST(req: NextRequest) {
       depth,
     });
     const report = generateReport(result);
+
+    // Save the resolved identity + contacts in the background so this
+    // person becomes browsable from the Dashboard/Persons page.
+    const db = await getDb();
+    const waitUntil = await getWaitUntil();
+    waitUntil(persistResearchResult(db, result.identity, result.contacts, { company: body.company, title: body.title }));
+
     return NextResponse.json({
       report,
       identity_confidence: result.identity?.confidence ?? 0,

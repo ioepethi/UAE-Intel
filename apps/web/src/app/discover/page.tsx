@@ -150,6 +150,10 @@ export default function DiscoverPage() {
               Export CSV
             </button>
           </div>
+          <p style={{ color: "var(--text-dim)", fontSize: 12, marginBottom: 16, marginTop: -8 }}>
+            Results are saved to the database in the background — search for them on the{" "}
+            <a href="/persons">Persons</a> page in a few seconds.
+          </p>
 
           {result.unknowns.length > 0 && (
             <div style={{ marginBottom: 16, padding: "12px 16px", background: "var(--surface-2)", borderRadius: "var(--radius-sm)", fontSize: 13, color: "var(--text-muted)" }}>
@@ -176,7 +180,11 @@ export default function DiscoverPage() {
               <tbody>
                 {result.people.map((p, i) => (
                   <tr key={i}>
-                    <td style={{ fontWeight: 500 }}>{p.name}</td>
+                    <td style={{ fontWeight: 500 }}>
+                      <a href={`/persons?name=${encodeURIComponent(p.name)}`} title="Find in saved Persons">
+                        {p.name}
+                      </a>
+                    </td>
                     <td>{p.title ?? "—"}</td>
                     <td>
                       {p.company_website ? (

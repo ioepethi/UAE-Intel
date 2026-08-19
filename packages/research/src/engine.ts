@@ -15,9 +15,11 @@ import {
   extractEmails,
   extractPhones,
   extractLinkedIn,
+  extractLinkedInFromLinks,
   extractCompanyUrls,
   sourceFromPage,
 } from "./extractors.js";
+import { mapLimit } from "./util.js";
 
 export interface ResearchRequest {
   name?: string;
@@ -57,12 +59,19 @@ export class ResearchEngine {
     const depth = request.depth ?? "STANDARD";
     const maxQueries = DEPTH_QUERY_COUNT[depth];
 
-    // PHASE 1 — DISCOVERY
+    // PHASE 1 — DISCOVERY (queries run concurrently, not sequentially)
     const queries = buildDiscoveryQueries(request).slice(0, maxQueries);
+    const settled = await Promise.allSettled(
+      queries.map((q) => this.search.search(q, { maxResults: 8 })),
+    );
     const discovery: SearchResult[] = [];
-    for (const q of queries) {
-      const results = await this.search.search(q, { maxResults: 8 });
-      discovery.push(...results);
+    const searchErrors: string[] = [];
+    for (const s of settled) {
+      if (s.status === "fulfilled") discovery.push(...s.value);
+      else searchErrors.push(s.reason instanceof Error ? s.reason.message : String(s.reason));
+    }
+    if (discovery.length === 0 && searchErrors.length > 0) {
+      throw new Error(searchErrors[0]);
     }
 
     // PHASE 2 — IDENTITY RESOLUTION
@@ -166,19 +175,17 @@ export class ResearchEngine {
     depth: ResearchDepth,
   ): Promise<Source[]> {
     if (!request.company) return [];
-    const sources: Source[] = [];
     // Try to fetch the most likely company homepage and about/leadership pages.
     const candidateUrls = discovery
       .filter((r) => r.source_type === "company" || r.source_type === "unverified")
       .map((r) => r.url)
       .slice(0, depth === "DEEP" || depth === "DUE DILIGENCE" ? 5 : 2);
-    for (const url of candidateUrls) {
-      const page = await this.fetcher.fetch(url);
-      if (page) {
-        sources.push(sourceFromPage(page.url, page.title, `Company page for ${request.company}`));
-      }
-    }
-    return sources;
+    // Fetch concurrently rather than one-by-one — this is a major factor in
+    // how long a research request takes end to end.
+    const pages = await mapLimit(candidateUrls, 5, (url) => this.fetcher.fetch(url));
+    return pages
+      .filter((page): page is NonNullable<typeof page> => page != null)
+      .map((page) => sourceFromPage(page.url, page.title, `Company page for ${request.company}`));
   }
 
   private async discoverContacts(
@@ -187,16 +194,20 @@ export class ResearchEngine {
     companySources: Source[],
   ): Promise<ContactCandidate[]> {
     const contacts: ContactCandidate[] = [];
-    // Pull contacts from company pages we fetched.
-    for (const src of companySources) {
-      const page = await this.fetcher.fetch(src.url);
+    // Pull contacts from company pages we fetched — concurrently.
+    const pages = await mapLimit(companySources, 5, (src) => this.fetcher.fetch(src.url));
+    for (const page of pages) {
       if (!page) continue;
       const pageSource = sourceFromPage(page.url, page.title, "Contact discovery");
       contacts.push(...extractEmails(page.text, pageSource));
       contacts.push(...extractPhones(page.text, pageSource));
       contacts.push(...extractLinkedIn(page.text, pageSource));
+      // LinkedIn links are almost always hyperlinked (not written out as
+      // visible text), so hrefs from the raw HTML are the reliable source.
+      contacts.push(...extractLinkedInFromLinks(page.links, pageSource));
     }
-    // Also scan discovery snippets for LinkedIn URLs.
+    // Also scan discovery snippets for LinkedIn URLs, and treat a discovery
+    // result that IS itself a LinkedIn profile as a direct match.
     for (const r of discovery) {
       const snippetSource = makeSource({
         url: r.url,
@@ -205,6 +216,9 @@ export class ResearchEngine {
         confirms: "Discovery snippet",
       });
       contacts.push(...extractLinkedIn(r.snippet, snippetSource));
+      if (/linkedin\.com\/(in|company)\//i.test(r.url)) {
+        contacts.push(...extractLinkedInFromLinks([r.url], snippetSource));
+      }
     }
     // Dedupe by (type, value).
     const seen = new Set<string>();

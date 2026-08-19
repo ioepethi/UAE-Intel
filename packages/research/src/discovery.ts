@@ -16,8 +16,11 @@ import {
   extractEmails,
   extractPhones,
   extractLinkedIn,
+  extractLinkedInFromLinks,
+  matchLinkedInToName,
   sourceFromPage,
 } from "./extractors.js";
+import { mapLimit } from "./util.js";
 
 export interface DiscoveryRequest {
   /** Free-text query, e.g. "CEOs of real estate companies in Dubai" */
@@ -70,6 +73,11 @@ const EMIRATES: Emirate[] = [
   "Ras Al Khaimah", "Fujairah", "Umm Al Quwain",
 ];
 
+/** Minimum quality bar for a discovered person to be included in results. */
+const MIN_CONFIDENCE_WITHOUT_LINK = 55;
+/** How many concurrent company-page fetches to run during enrichment. */
+const ENRICH_CONCURRENCY = 8;
+
 export class DiscoveryEngine {
   constructor(
     private readonly search: SearchProvider,
@@ -83,25 +91,42 @@ export class DiscoveryEngine {
     const industry = request.industry ?? parsed.industry;
     const emirate = request.emirate ?? parsed.emirate;
 
-    // Build multiple search queries to maximize coverage.
+    // Build multiple search queries to maximize coverage, and run them
+    // concurrently — this is the single biggest lever on wall-clock time.
     const queries = buildDiscoveryQueries(request.query, position, industry, emirate);
+    const settled = await Promise.allSettled(
+      queries.map((q) => this.search.search(q, { maxResults: 10 })),
+    );
     const allResults: SearchResult[] = [];
-    for (const q of queries) {
-      const results = await this.search.search(q, { maxResults: 10 });
-      allResults.push(...results);
+    const searchErrors: string[] = [];
+    for (const s of settled) {
+      if (s.status === "fulfilled") allResults.push(...s.value);
+      else searchErrors.push(s.reason instanceof Error ? s.reason.message : String(s.reason));
+    }
+    if (allResults.length === 0 && searchErrors.length > 0) {
+      throw new Error(searchErrors[0]);
     }
 
     // Extract people from search results.
     const people = extractPeopleFromResults(allResults, position, industry, emirate);
 
-    // Fetch company pages to enrich contacts.
-    const enriched = await this.enrichWithContacts(people, allResults);
+    // Dedupe by name, sort by initial confidence, and only enrich a bounded
+    // candidate pool — fetching company pages for every extracted mention
+    // (often hundreds before dedupe) is the other major source of slowness.
+    const deduped = dedupeByName(people).sort((a, b) => b.confidence - a.confidence);
+    const enrichPoolSize = Math.min(deduped.length, Math.max(maxResults * 2, 40));
+    const candidatePool = deduped.slice(0, enrichPoolSize);
 
-    // Dedupe by name.
-    const deduped = dedupeByName(enriched);
+    // Enrich with company site contacts (parallelized, deduped per domain).
+    await this.enrichWithContacts(candidatePool, allResults);
 
-    // Sort by confidence, limit to maxResults.
-    const final = deduped
+    // Quality gate: drop entries with no verifiable link and low confidence.
+    const qualityFiltered = candidatePool.filter(
+      (p) => p.company_website || p.linkedin_url || p.confidence >= MIN_CONFIDENCE_WITHOUT_LINK,
+    );
+
+    // Final sort (enrichment may have boosted confidence) and limit.
+    const final = qualityFiltered
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, maxResults);
 
@@ -122,6 +147,10 @@ export class DiscoveryEngine {
     if (withoutContacts.length > 0) {
       unknowns.push(`${withoutContacts.length} of ${final.length} people have no public business contact discovered.`);
     }
+    const droppedForQuality = candidatePool.length - qualityFiltered.length;
+    if (droppedForQuality > 0) {
+      unknowns.push(`${droppedForQuality} low-confidence result(s) with no website or LinkedIn were excluded.`);
+    }
 
     return {
       request,
@@ -135,62 +164,74 @@ export class DiscoveryEngine {
   private async enrichWithContacts(
     people: DiscoveredPerson[],
     results: SearchResult[],
-  ): Promise<DiscoveredPerson[]> {
-    // Build a map of company → search result URL for fetching.
+  ): Promise<void> {
+    // Map of domain -> a representative result URL, used as a fallback when
+    // a person's company can't be matched by name substring alone.
     const companyUrls = new Map<string, string>();
     for (const r of results) {
       const lower = r.url.toLowerCase();
-      if (
-        lower.includes("linkedin.com") ||
-        lower.includes("wikipedia.org") ||
-        lower.includes("instagram.com") ||
-        lower.includes("facebook.com") ||
-        lower.includes("youtube.com")
-      ) continue;
-      // Use the URL's domain as a key.
+      if (isNonCompanyDomain(lower)) continue;
       const domain = extractDomain(r.url);
       if (domain) companyUrls.set(domain, r.url);
     }
 
-    // For each person, try to find contacts from their company website.
+    // Resolve a company_website for every person we can, BEFORE fetching.
+    // We deliberately match on domain-name overlap only (not a loose text
+    // substring match) — a news/aggregator page that merely *mentions* a
+    // company is not that company's website, and attaching it as one would
+    // be misleading. If no real match exists, leave it unset rather than
+    // guessing (the quality filter below drops low-confidence entries with
+    // neither a website nor a LinkedIn anyway).
     for (const person of people) {
-      if (!person.company_website) {
-        // Try to match company name to a URL from results.
-        if (person.company) {
-          const match = results.find(
-            (r) =>
-              r.title.toLowerCase().includes(person.company!.toLowerCase()) ||
-              r.snippet.toLowerCase().includes(person.company!.toLowerCase()),
-          );
-          if (match) person.company_website = match.url;
+      if (person.company_website || !person.company) continue;
+      const domainMatch = matchDomainForCompany(person.company, companyUrls);
+      if (domainMatch) person.company_website = domainMatch;
+    }
+
+    // Group people by the domain of their company website so each unique
+    // site is fetched exactly once, then fetch all unique sites concurrently.
+    const byDomain = new Map<string, DiscoveredPerson[]>();
+    for (const person of people) {
+      if (!person.company_website) continue;
+      const domain = extractDomain(person.company_website) ?? person.company_website;
+      const group = byDomain.get(domain);
+      if (group) group.push(person);
+      else byDomain.set(domain, [person]);
+    }
+
+    const domainEntries = [...byDomain.entries()];
+    await mapLimit(domainEntries, ENRICH_CONCURRENCY, async ([, group]) => {
+      const url = group[0].company_website!;
+      const page = await this.fetcher.fetch(url);
+      if (!page) return;
+
+      const pageSource = sourceFromPage(page.url, page.title, `Company page for ${group[0].company ?? group[0].name}`);
+      const emails = extractEmails(page.text, pageSource);
+      const phones = extractPhones(page.text, pageSource);
+      const linkedinsFromText = extractLinkedIn(page.text, pageSource);
+      const linkedinsFromLinks = extractLinkedInFromLinks(page.links, pageSource);
+      const linkedins = dedupeContacts([...linkedinsFromText, ...linkedinsFromLinks]);
+
+      for (const person of group) {
+        if (!person.company_email) {
+          const best = pickBestEmail(emails, person.name);
+          if (best) person.company_email = best.value;
         }
-      }
-
-      if (person.company_website) {
-        const page = await this.fetcher.fetch(person.company_website);
-        if (page) {
-          const pageSource = sourceFromPage(page.url, page.title, `Company page for ${person.company ?? person.name}`);
-          const emails = extractEmails(page.text, pageSource);
-          const phones = extractPhones(page.text, pageSource);
-          const linkedins = extractLinkedIn(page.text, pageSource);
-
-          if (!person.company_email && emails.length > 0) {
-            const best = emails.find((e) => e.type === "company_email") ?? emails[0];
-            person.company_email = best.value;
+        if (!person.business_phone && phones.length > 0) {
+          person.business_phone = phones[0].value;
+        }
+        if (!person.linkedin_url) {
+          const match = matchLinkedInToName(linkedins, person.name);
+          if (match) {
+            person.linkedin_url = match.value;
+            person.confidence = Math.min(95, person.confidence + 10);
           }
-          if (!person.business_phone && phones.length > 0) {
-            person.business_phone = phones[0].value;
-          }
-          if (!person.linkedin_url && linkedins.length > 0) {
-            const profile = linkedins.find((l) => l.type === "linkedin");
-            if (profile) person.linkedin_url = profile.value;
-          }
+        }
+        if (person.company_website && !person.sources.some((s) => s.url === pageSource.url)) {
           person.sources.push(pageSource);
         }
       }
-    }
-
-    return people;
+    });
   }
 }
 
@@ -267,6 +308,7 @@ function buildDiscoveryQueries(
     queries.push(`wealthiest businessmen ${loc} ${ind}`.trim());
   }
   queries.push(`${pos} ${loc} business directory`.trim());
+  queries.push(`${pos} ${ind} ${loc} LinkedIn`.trim());
 
   return queries
     .map((q) => q.replace(/\s+/g, " ").trim())
@@ -287,6 +329,9 @@ function extractPeopleFromResults(
   for (const result of results) {
     const text = `${result.title}\n${result.snippet}`;
     const extracted = extractNamesFromText(text, result);
+    // If the result IS a LinkedIn profile page, its own URL is a direct,
+    // high-confidence signal for the person whose name we just extracted.
+    const isLinkedInProfile = /linkedin\.com\/in\//i.test(result.url);
 
     for (const name of extracted) {
       const lowerName = name.toLowerCase();
@@ -305,11 +350,11 @@ function extractPeopleFromResults(
         industry: industry ?? null,
         emirate: emirate ?? null,
         location: emirate ? `${emirate}, UAE` : "UAE",
-        linkedin_url: null,
+        linkedin_url: isLinkedInProfile ? result.url.split("?")[0] : null,
         company_website: null,
         business_phone: null,
         company_email: null,
-        confidence: computeDiscoveryConfidence(name, company, title, result),
+        confidence: computeDiscoveryConfidence(name, company, title, result, isLinkedInProfile),
         sources: [
           makeSource({
             url: result.url,
@@ -370,6 +415,12 @@ function extractNamesFromText(text: string, result: SearchResult): string[] {
     }
   }
 
+  // Pattern 5: LinkedIn-style title tag "First Last - Title - Company | LinkedIn"
+  if (/\|\s*LinkedIn\s*$/i.test(result.title)) {
+    const head = result.title.split(/\s*[-–|]\s*/)[0]?.trim();
+    if (head && isPlausiblePersonName(head)) names.push(head);
+  }
+
   return [...new Set(names)];
 }
 
@@ -425,6 +476,7 @@ function computeDiscoveryConfidence(
   company: string | null,
   title: string | null,
   result: SearchResult,
+  hasLinkedIn = false,
 ): number {
   let score = 30; // base
   if (company) score += 20;
@@ -433,7 +485,8 @@ function computeDiscoveryConfidence(
   if (result.source_type === "publication") score += 10;
   if (result.source_type === "official") score += 15;
   if (result.source_type === "company") score += 10;
-  return Math.min(90, score);
+  if (hasLinkedIn) score += 15;
+  return Math.min(95, score);
 }
 
 function dedupeByName(people: DiscoveredPerson[]): DiscoveredPerson[] {
@@ -458,6 +511,77 @@ function dedupeByName(people: DiscoveredPerson[]): DiscoveredPerson[] {
     }
   }
   return [...byName.values()];
+}
+
+function dedupeContacts(contacts: ContactCandidate[]): ContactCandidate[] {
+  const seen = new Set<string>();
+  return contacts.filter((c) => {
+    const key = `${c.type}|${c.value.toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Choose the best email for a person: prefer a professional-looking address
+ * whose local-part matches their name, then any professional address found
+ * on the page, then fall back to a generic company inbox (info@/contact@).
+ */
+function pickBestEmail(emails: ContactCandidate[], personName: string): ContactCandidate | null {
+  if (emails.length === 0) return null;
+  const nameParts = personName
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((p) => p.length > 1);
+
+  const nameMatched = emails.find(
+    (e) => e.type === "professional_email" && nameParts.some((p) => e.value.split("@")[0].includes(p)),
+  );
+  if (nameMatched) return nameMatched;
+
+  const anyProfessional = emails.find((e) => e.type === "professional_email");
+  if (anyProfessional) return anyProfessional;
+
+  const generic = emails.find((e) => e.type === "company_email");
+  return generic ?? emails[0];
+}
+
+/** Match a company name to a known domain when a direct text mention isn't found. */
+function matchDomainForCompany(company: string, companyUrls: Map<string, string>): string | null {
+  const normalized = normalizeCompanyName(company);
+  if (normalized.length < 3) return null;
+  for (const [domain, url] of companyUrls) {
+    const domainCore = normalizeCompanyName(domain.replace(/\.[a-z.]{2,}$/i, ""));
+    if (domainCore.length < 3) continue;
+    if (normalized.includes(domainCore) || domainCore.includes(normalized)) {
+      return url;
+    }
+  }
+  return null;
+}
+
+function normalizeCompanyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(group|properties|holding|holdings|llc|pjsc|fzco|fze|co|company|international|intl|real estate|realty|inc|ltd)\b/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
+/** Known non-company domains: social media, publications, aggregators, job/directory sites. */
+const NON_COMPANY_DOMAIN_FRAGMENTS = [
+  "linkedin.com", "wikipedia.org", "instagram.com", "facebook.com", "youtube.com",
+  "twitter.com", "x.com", "tiktok.com",
+  "bloomberg.com", "reuters.com", "thenationalnews.com", "khaleejtimes.com",
+  "gulfnews.com", "arabianbusiness.com", "crunchbase.com", "forbes.com",
+  "forbesmiddleeast.com", "entrepreneur.com", "businessinsider.com",
+  "naukrigulf.com", "indeed.com", "bayt.com", "glassdoor.com", "scribd.com",
+  "about.me", "google.com", "tavily.com",
+];
+
+function isNonCompanyDomain(lowerUrl: string): boolean {
+  return NON_COMPANY_DOMAIN_FRAGMENTS.some((f) => lowerUrl.includes(f));
 }
 
 function extractDomain(url: string): string | null {

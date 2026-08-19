@@ -2,6 +2,7 @@ import { getDb } from "@/lib/server";
 import { getCompany, rolesForCompany, contactsForCompany } from "@uae-intel/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import TrackVisit from "@/components/TrackVisit";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,12 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 
   return (
     <div>
+      <TrackVisit
+        type="company"
+        id={id}
+        name={company!.legal_name}
+        subtitle={company!.industry}
+      />
       <div className="page-header">
         <h1>{company!.legal_name}</h1>
         <p>{company!.industry ?? "Industry not verified"} · {company!.emirate ?? "Emirate not verified"}</p>

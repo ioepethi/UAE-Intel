@@ -22,9 +22,9 @@ export class HtmlFetcher implements Fetcher {
       opts.userAgent ??
       process.env.FETCH_USER_AGENT ??
       "uae-intel-research/1.0 (+public business intelligence research)";
-    this.delayMs = Number(process.env.FETCH_DELAY_MS ?? opts.delayMs ?? 800);
+    this.delayMs = Number(process.env.FETCH_DELAY_MS ?? opts.delayMs ?? 150);
     this.maxBytes = opts.maxBytes ?? 200_000;
-    this.timeoutMs = opts.timeoutMs ?? 15_000;
+    this.timeoutMs = Number(process.env.FETCH_TIMEOUT_MS ?? opts.timeoutMs ?? 8_000);
   }
 
   async fetch(url: string): Promise<FetchResult | null> {
@@ -47,11 +47,16 @@ export class HtmlFetcher implements Fetcher {
         return null;
       }
       const buf = await res.arrayBuffer();
-      const text = new TextDecoder("utf-8").decode(buf.slice(0, this.maxBytes));
+      const html = new TextDecoder("utf-8").decode(buf.slice(0, this.maxBytes));
+      const finalUrl = res.url ?? url;
       return {
-        url: res.url ?? url,
-        title: extractTitle(text),
-        text: stripHtml(text),
+        url: finalUrl,
+        title: extractTitle(html),
+        text: stripHtml(html),
+        // Links are extracted BEFORE stripping tags — stripHtml discards all
+        // attributes (including href), so this is the only place hyperlinks
+        // (e.g. LinkedIn profile URLs) can be recovered from a fetched page.
+        links: extractLinks(html, finalUrl),
         status: res.status,
       };
     } catch {
@@ -71,6 +76,23 @@ export class HtmlFetcher implements Fetcher {
 function extractTitle(html: string): string {
   const m = html.match(/<title[^>]*>([^<]*)<\/title>/i);
   return m ? m[1].trim() : "";
+}
+
+/** Extract absolute hyperlink URLs (href values) from raw HTML, resolved against the page URL. */
+export function extractLinks(html: string, baseUrl: string): string[] {
+  const found = new Set<string>();
+  const matches = html.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#]+)["']/gi);
+  for (const m of matches) {
+    const raw = m[1]?.trim();
+    if (!raw) continue;
+    try {
+      const abs = new URL(raw, baseUrl).toString();
+      found.add(abs);
+    } catch {
+      // Ignore malformed hrefs (mailto:, javascript:, tel: without a value, etc.)
+    }
+  }
+  return [...found];
 }
 
 /** Very small HTML-to-text converter. Avoids a dependency. */

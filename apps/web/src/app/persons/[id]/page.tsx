@@ -7,6 +7,7 @@ import {
 } from "@uae-intel/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import TrackVisit from "@/components/TrackVisit";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -43,6 +44,12 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
 
   return (
     <div>
+      <TrackVisit
+        type="person"
+        id={id}
+        name={person!.full_name}
+        subtitle={person!.current_title}
+      />
       <div className="page-header">
         <h1>{person!.full_name}</h1>
         <p>{person!.current_title ?? "Title not verified"} · {person!.location ?? "Location not verified"}</p>
