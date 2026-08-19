@@ -121,20 +121,38 @@ a:hover {
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.02em;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sidebar-logo:hover {
+  color: var(--text);
 }
 
 .sidebar-logo .logo-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   background: var(--accent-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  font-weight: 800;
-  color: white;
-  box-shadow: 0 4px 12px var(--accent-glow);
+  box-shadow: 0 4px 14px var(--accent-glow);
+  flex-shrink: 0;
+}
+
+.sidebar-logo .logo-text {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.sidebar-logo .logo-accent {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-left: 2px;
 }
 
 .sidebar-section {
